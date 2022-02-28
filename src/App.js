@@ -1,7 +1,10 @@
 import React, {useEffect, useState} from 'react';
-import {ethers} from "ethers";
+import {ethers} from 'ethers';
 import twitterLogo from './assets/twitter-logo.svg';
 import contractAbi from './utils/contractAbi.json';
+import polygonLogo from './assets/polygonlogo.png';
+import ethLogo from './assets/ethlogo.png';
+import {networks} from "./utils/networks";
 import './styles/App.css';
 
 // Constants
@@ -12,9 +15,46 @@ const CONTRACT_ADDRESS = '0x348ead3ebFC44bf70c93D89dd0cD1A22530a892C';
 const SPOTIFY_URL_PREFIX = 'https://open.spotify.com/track/';
 
 const App = () => {
+	const [network, setNetwork] = useState('');
 	const [currentAccount, setCurrentAccount] = useState('');
 	const [domain, setDomain] = useState('');
 	const [record, setRecord] = useState('');
+
+	const switchNetwork = async () => {
+		if (window.ethereum) {
+			try {
+				await window.ethereum.request({
+					method: 'wallet_switchEthereumChain',
+					params: [{chainId: '0x13881'}],
+				});
+			} catch (error) {
+				// Prompt the user to add the right chain if they don't
+				if (error.code === 4902) {
+					try {
+						await window.ethereum.request({
+							method: 'wallet_addEthereumChain',
+							params: [{
+								chainId: '0x13881',
+								chainName: 'Polygon Mumbai Testnet',
+								rpcUrls: ['https://rpc-mumbai.maticvigil.com/'],
+								nativeCurrency: {
+									name: 'Mumbai Matic',
+									symbol: 'MATIC',
+									decimals: 18
+								},
+								blockExplorerUrls: ['https://mumbai.polygonscan.com/']
+							}]
+						});
+					} catch (error) {
+						console.log(error);
+					}
+				}
+				console.log(error);
+			}
+		} else {
+			alert('MetaMask is not installed. Please install it to use this app: https://metamask.io/download.html');
+		}
+	}
 
 	const connectWallet = async () => {
 		try {
@@ -53,6 +93,15 @@ const App = () => {
 		} else {
 			console.log('No authorized account found');
 		}
+
+		const chainId = await ethereum.request({ method: 'eth_chainId' });
+		setNetwork(networks[chainId]);
+
+		// Reload the page when they change networks
+		function handleChainChanged(_chainId) {
+			window.location.reload();
+		}
+		ethereum.on('chainChanged', handleChainChanged);
 	}
 
 	const parseSpotifyUrl = () => {
@@ -120,36 +169,47 @@ const App = () => {
 		</div>
   	);
 
-	const renderInputForm = () => (
-		<div className="form-container">
-			<div className="first-row">
+	const renderInputForm = () => {
+		if (network !== 'Polygon Mumbai Testnet') {
+			return (
+				<div className="connect-wallet-container">
+					<h2>Please connect to the Polygon Mumbai Testnet!</h2>
+					<button className="cta-button mint-button" onClick={switchNetwork}>Click here to switch networks</button>
+				</div>
+			);
+		}
+
+		return (
+			<div className="form-container">
+				<div className="first-row">
+					<input
+						type="text"
+						value={domain}
+						placeholder='domain'
+						onChange={e => setDomain(e.target.value)}
+					/>
+					<p className='tld'> {TLD} </p>
+				</div>
+
 				<input
 					type="text"
-					value={domain}
-					placeholder='domain'
-					onChange={e => setDomain(e.target.value)}
+					value={record}
+					placeholder='Spotify favorite song link!'
+					onChange={e => setRecord(e.target.value)}
 				/>
-				<p className='tld'> {TLD} </p>
+
+				<div className="button-container">
+					<button className='cta-button mint-button' disabled={null} onClick={mintDomain}>
+						Mint
+					</button>
+					<button className='cta-button mint-button' disabled={null} onClick={null}>
+						Set data
+					</button>
+				</div>
+
 			</div>
-
-			<input
-				type="text"
-				value={record}
-				placeholder='Spotify favorite song link!'
-				onChange={e => setRecord(e.target.value)}
-			/>
-
-			<div className="button-container">
-				<button className='cta-button mint-button' disabled={null} onClick={mintDomain}>
-					Mint
-				</button>
-				<button className='cta-button mint-button' disabled={null} onClick={null}>
-					Set data
-				</button>
-			</div>
-
-		</div>
-	);
+		);
+	};
 
 	useEffect(() => {
 		checkIfWalletIsConnected();
@@ -161,8 +221,12 @@ const App = () => {
 				<div className="header-container">
 					<header>
 						<div className="left">
-						  <p className="title">🎤 Music Name Service 🎤</p>
-						  <p className="subtitle">Your favorite song on the blockchain!</p>
+					  		<p className="title">🎤 Music Name Service 🎤</p>
+						  	<p className="subtitle">Your favorite song on the blockchain!</p>
+						</div>
+						<div className="right">
+							<img alt="Network Logo" className="logo" src={network.includes("Polygon") ? polygonLogo : ethLogo} />
+							{currentAccount ? <p>Wallet: {currentAccount.slice(0,6)}...{currentAccount.slice(-4)}</p> : <p>Not connected</p>}
 						</div>
 					</header>
 				</div>
