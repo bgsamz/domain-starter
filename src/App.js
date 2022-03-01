@@ -11,7 +11,7 @@ import './styles/App.css';
 const TWITTER_HANDLE = 'bgsamz';
 const TWITTER_LINK = `https://twitter.com/${TWITTER_HANDLE}`;
 const TLD = '.mus';
-const CONTRACT_ADDRESS = '0x348ead3ebFC44bf70c93D89dd0cD1A22530a892C';
+const CONTRACT_ADDRESS = '0x24e19B546Bc86468cEABA3A9DAf5B1AcD0bf8ba5';
 const SPOTIFY_URL_PREFIX = 'https://open.spotify.com/track/';
 
 const App = () => {
@@ -19,6 +19,9 @@ const App = () => {
 	const [currentAccount, setCurrentAccount] = useState('');
 	const [domain, setDomain] = useState('');
 	const [record, setRecord] = useState('');
+	const [editing, setEditing] = useState(false);
+	const [loading, setLoading] = useState(false);
+	const [mints, setMints] = useState([]);
 
 	const switchNetwork = async () => {
 		if (window.ethereum) {
@@ -105,25 +108,27 @@ const App = () => {
 	}
 
 	const parseSpotifyUrl = () => {
+		let recordToUpdate = null;
 		if (!record.startsWith(SPOTIFY_URL_PREFIX)) {
 			alert('Record must be a valid spotify url!')
 			setRecord('');
 		} else {
-			setRecord(record.substring(SPOTIFY_URL_PREFIX.length).split('?')[0]);
+			recordToUpdate = record.substring(SPOTIFY_URL_PREFIX.length).split('?')[0];
+			setRecord(recordToUpdate);
 		}
+		return recordToUpdate;
 	}
 
 	const mintDomain = async () => {
-		if (!domain) {
+		setLoading(true);
+
+		let recordToUpdate = parseSpotifyUrl();
+		if (!domain || !recordToUpdate) {
+			setLoading(false);
 			return;
 		} else if (domain.length < 3) {
 			alert('Domain must be at least 3 characters long!');
-			return;
-		}
-
-		parseSpotifyUrl();
-		if (!record) {
-			// We alert in the parse function, so just return here.
+			setLoading(false);
 			return;
 		}
 
@@ -144,10 +149,15 @@ const App = () => {
 				if (receipt.status === 1) {
 					console.log(`Domain minted! https://mumbai.polygonscan.com/tx/${tx.hash}`);
 
-					tx = await contract.setRecord(domain, record);
+					tx = await contract.setRecord(domain, recordToUpdate);
 					await tx.wait();
 
 					console.log(`Record set! https://mumbai.polygonscan.com/tx/${tx.hash}`);
+
+					// Get our mints after a short wait to see the new one in realtime
+					setTimeout(() => {
+						fetchMints();
+					}, 2000);
 
 					setRecord('');
 					setDomain('');
@@ -158,7 +168,81 @@ const App = () => {
 		} catch (error) {
 			console.log(error);
 		}
+		setLoading(false);
 	}
+
+	const updateDomain = async () => {
+		setLoading(true);
+
+		// Parse the spotify URL first, this will clear the record if it's invalid
+		let recordToUpdate = parseSpotifyUrl();
+		if (!recordToUpdate || !domain) {
+			setLoading(false);
+			return;
+		}
+
+		console.log(`Updating domain ${domain} with record ${recordToUpdate}`);
+		try {
+			const {ethereum} = window;
+			if (ethereum) {
+				const provider = new ethers.providers.Web3Provider(ethereum);
+				const signer = provider.getSigner();
+				const contract = new ethers.Contract(CONTRACT_ADDRESS, contractAbi.abi, signer);
+
+				let tx = await contract.setRecord(domain, recordToUpdate);
+				await tx.wait();
+				console.log(`Record set https://mumbai.polygonscan.com/tx/${tx.hash}`);
+
+				await fetchMints();
+				setRecord('');
+				setDomain('');
+			}
+		} catch (error) {
+			console.log(error);
+		}
+		setLoading(false);
+	}
+
+	const editRecord = (name) => {
+		console.log("Editing record for", name);
+		setEditing(true);
+		setDomain(name);
+	}
+
+	const fetchMints = async () => {
+		try {
+			const {ethereum} = window;
+			if (ethereum) {
+				const provider = new ethers.providers.Web3Provider(ethereum);
+				const signer = provider.getSigner();
+				const contract = new ethers.Contract(CONTRACT_ADDRESS, contractAbi.abi, signer);
+
+				const names = await contract.getAllNames();
+
+				const mintRecords = await Promise.all(names.map(async (name) => {
+					const mintRecord = await contract.records(name);
+					const owner = await contract.domains(name);
+					return {
+						id: names.indexOf(name),
+						name: name,
+						record: mintRecord,
+						owner: owner,
+					};
+				}));
+
+				console.log("Mints fetched: ", mintRecords);
+				setMints(mintRecords);
+			}
+		} catch (error) {
+			console.log(error);
+		}
+	}
+
+	useEffect(() => {
+		if (network === 'Polygon Mumbai Testnet') {
+			fetchMints();
+		}
+	}, [currentAccount, network]);
 
 	const renderNotConnectedContainer = () => (
 		<div className="connect-wallet-container">
@@ -187,6 +271,7 @@ const App = () => {
 						value={domain}
 						placeholder='domain'
 						onChange={e => setDomain(e.target.value)}
+						disabled={loading}
 					/>
 					<p className='tld'> {TLD} </p>
 				</div>
@@ -196,24 +281,75 @@ const App = () => {
 					value={record}
 					placeholder='Spotify favorite song link!'
 					onChange={e => setRecord(e.target.value)}
+					disabled={loading}
 				/>
 
-				<div className="button-container">
-					<button className='cta-button mint-button' disabled={null} onClick={mintDomain}>
-						Mint
-					</button>
-					<button className='cta-button mint-button' disabled={null} onClick={null}>
-						Set data
-					</button>
-				</div>
-
+				{editing ? (
+					<div className="button-container">
+						<button className='cta-button mint-button' disabled={loading} onClick={updateDomain}>
+							Set Record
+						</button>
+						<button className='cta-button mint-button' onClick={() => {setEditing(false)}}>
+							Cancel
+						</button>
+					</div>
+				) : (
+					<div className="button-container">
+						<button className='cta-button mint-button' disabled={loading} onClick={mintDomain}>
+							Mint
+						</button>
+					</div>
+				)}
 			</div>
 		);
 	};
 
+	const renderSpotifyIframe = (trackId) => {
+		return (
+			<iframe
+				style={{"borderRadius": "12px"}}
+				src={`https://open.spotify.com/embed/track/${trackId}?utm_source=generator`}
+				width="100%" height="380" frameBorder="0" allowFullScreen=""
+				allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture">
+			</iframe>
+		);
+	}
+
+	const renderMints = () => {
+		if (currentAccount && mints.length > 0) {
+			return (
+				<div className="mint-container">
+					<p className="subtitle">Recently minted domains!</p>
+					<div className="mint-list">
+						{mints.map((mint, index) => {
+							return (
+								<div className="mint-item" key={index}>
+									<div className="mint-row">
+										<a className="link"
+										   href={`https://testnets.opensea.io/assets/mumbai/${CONTRACT_ADDRESS}/${mint.id}`}
+										   target="_blank" rel="noopener noreferrer">
+											<p className="underlined">{" "}{mint.name}{" "}</p>
+										</a>
+										{mint.owner.toLowerCase() === currentAccount.toLowerCase() ?
+											<button className="edit-button" onClick={() => editRecord(mint.name)}>
+												<img className="edit-icon" src="https://img.icons8.com/metro/26/000000/pencil.png" alt="Edit Button"/>
+											</button>
+											: null
+										}
+									</div>
+									<p>{renderSpotifyIframe(mint.record)}</p>
+								</div>
+							)
+						})}
+					</div>
+				</div>
+			);
+		}
+	};
+
 	useEffect(() => {
 		checkIfWalletIsConnected();
-	}, [])
+	}, []);
 
   	return (
 		<div className="App">
@@ -232,16 +368,7 @@ const App = () => {
 				</div>
 
 				{currentAccount ? renderInputForm() : renderNotConnectedContainer()}
-
-				<div>
-					<iframe
-						style={{"borderRadius": "12px"}}
-						src="https://open.spotify.com/embed/track/2qQpFbqqkLOGySgNK8wBXt?utm_source=generator"
-						width="50%" height="380" frameBorder="0" allowFullScreen=""
-						allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture">
-
-					</iframe>
-				</div>
+				{mints && renderMints()}
 
 		 		<div className="footer-container">
 					<img alt="Twitter Logo" className="twitter-logo" src={twitterLogo} />
