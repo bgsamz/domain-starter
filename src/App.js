@@ -11,7 +11,7 @@ import './styles/App.css';
 const TWITTER_HANDLE = 'bgsamz';
 const TWITTER_LINK = `https://twitter.com/${TWITTER_HANDLE}`;
 const TLD = '.mus';
-const CONTRACT_ADDRESS = '0x24e19B546Bc86468cEABA3A9DAf5B1AcD0bf8ba5';
+const CONTRACT_ADDRESS = '0x63D90Dd94d65f0681BE19487A7F9567e4B985a10';
 const SPOTIFY_URL_PREFIX = 'https://open.spotify.com/track/';
 
 const App = () => {
@@ -22,6 +22,7 @@ const App = () => {
 	const [editing, setEditing] = useState(false);
 	const [loading, setLoading] = useState(false);
 	const [mints, setMints] = useState([]);
+	const [isContractOwner, setIsContractOwner] = useState(false);
 
 	const switchNetwork = async () => {
 		if (window.ethereum) {
@@ -101,10 +102,26 @@ const App = () => {
 		setNetwork(networks[chainId]);
 
 		// Reload the page when they change networks
-		function handleChainChanged(_chainId) {
+		function handleChainOrAccountChange(changeVar) {
 			window.location.reload();
 		}
-		ethereum.on('chainChanged', handleChainChanged);
+		ethereum.on('chainChanged', handleChainOrAccountChange);
+		ethereum.on('accountsChanged', handleChainOrAccountChange);
+	}
+
+	const getContractOwner = async () => {
+		try {
+			const {ethereum} = window;
+			if (ethereum) {
+				const provider = new ethers.providers.Web3Provider(ethereum);
+				const signer = provider.getSigner();
+				const contract = new ethers.Contract(CONTRACT_ADDRESS, contractAbi.abi, signer);
+
+				setIsContractOwner(await contract.isOwner());
+			}
+		} catch (error) {
+			console.log(error);
+		}
 	}
 
 	const parseSpotifyUrl = () => {
@@ -143,16 +160,11 @@ const App = () => {
 				const contract = new ethers.Contract(CONTRACT_ADDRESS, contractAbi.abi, signer);
 
 				console.log('Popping wallet now to pay gas.');
-				let tx = await contract.register(domain, {value: ethers.utils.parseEther(price)});
+				let tx = await contract.register(domain, recordToUpdate, {value: ethers.utils.parseEther(price)});
 				const receipt = await tx.wait();
 
 				if (receipt.status === 1) {
-					console.log(`Domain minted! https://mumbai.polygonscan.com/tx/${tx.hash}`);
-
-					tx = await contract.setRecord(domain, recordToUpdate);
-					await tx.wait();
-
-					console.log(`Record set! https://mumbai.polygonscan.com/tx/${tx.hash}`);
+					alert(`Domain minted! https://mumbai.polygonscan.com/tx/${tx.hash}`);
 
 					// Get our mints after a short wait to see the new one in realtime
 					setTimeout(() => {
@@ -208,6 +220,22 @@ const App = () => {
 		setEditing(true);
 		setDomain(name);
 	}
+
+	const withdrawMatic = async () => {
+		try {
+			const {ethereum} = window;
+			if (ethereum) {
+				const provider = new ethers.providers.Web3Provider(ethereum);
+				const signer = provider.getSigner();
+				const contract = new ethers.Contract(CONTRACT_ADDRESS, contractAbi.abi, signer);
+
+				await contract.withdraw();
+				alert("Successfully withdrew MATIC from contract!");
+			}
+		} catch (error) {
+			console.log(error);
+		}
+	};
 
 	const fetchMints = async () => {
 		try {
@@ -347,8 +375,19 @@ const App = () => {
 		}
 	};
 
+	const renderWithdrawButton = () => {
+		return (
+			<div className="button-container">
+				<button onClick={withdrawMatic} className="cta-button connect-wallet-button">
+					Withdraw MATIC
+				</button>
+			</div>
+		);
+	};
+
 	useEffect(() => {
 		checkIfWalletIsConnected();
+		getContractOwner();
 	}, []);
 
   	return (
@@ -369,6 +408,7 @@ const App = () => {
 
 				{currentAccount ? renderInputForm() : renderNotConnectedContainer()}
 				{mints && renderMints()}
+				{isContractOwner && renderWithdrawButton()}
 
 		 		<div className="footer-container">
 					<img alt="Twitter Logo" className="twitter-logo" src={twitterLogo} />

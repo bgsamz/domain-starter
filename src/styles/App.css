@@ -63,8 +63,8 @@ header{
   margin-top: 10px;
 }
 
-.content-container {
-  background-color: #bf408a;
+.mint-container {
+  background-color: #0d2226;
 }
 
 .cta-button {
@@ -106,7 +106,7 @@ header{
 }
 
 .mint-button {
-  background: -webkit-linear-gradient(left, #9540bf, #bf5540);
+  background: -webkit-linear-gradient(left, #404abf, #bf5540);
   font-size: 18px;
   background-size: 200% 200%;
   animation: gradient-animation 4s ease infinite;
@@ -147,6 +147,7 @@ header{
   justify-content: center;
   align-items: center;
   padding-bottom: 30px;
+  background-color: #0d2226;
 }
 
 .twitter-logo {
@@ -166,6 +167,7 @@ header{
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  background-color: #0d2226;
 }
 
 input{
@@ -230,7 +232,7 @@ input:focus {
   border-radius: 5px;
   margin: 10px 15px;
   font-size: 18px;
-  background-color: #c4b7fa;
+  background-color: #404abf;
   color: black;
   min-width: 150px;
   max-width: fit-content;
@@ -239,15 +241,15 @@ input:focus {
 
 /* Different background-colour for every nth mint-item */
 .mint-item:nth-child(2n) {
-  background-color: lightblue;
+  background-color: #bf408a;
 }
 
 .mint-item:nth-child(3n) {
-  background-color: lightpink;
+  background-color: #bfb540;
 }
 
 .mint-item:nth-child(5n) {
-  background-color: lightgreen;
+  background-color: #40bf75;
 }
 
 .link{
